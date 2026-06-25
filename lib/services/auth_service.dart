@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_helper.dart';
 
+import 'api_service.dart';
+
 class AuthService {
   static const String _keyIsLoggedIn = 'is_logged_in';
   static const String _keyUsername = 'logged_in_username';
@@ -9,18 +11,33 @@ class AuthService {
 
   Future<bool> register(String username, String password) async {
     if (username.isEmpty || password.isEmpty) return false;
-    final result = await _dbHelper.registerUser(username, password);
-    return result != -1;
+    try {
+      final response = await ApiService.register(username, password);
+      return response['success'] == true;
+    } catch (_) {
+      final result = await _dbHelper.registerUser(username, password);
+      return result != -1;
+    }
   }
 
   Future<bool> login(String username, String password) async {
     if (username.isEmpty || password.isEmpty) return false;
-    final user = await _dbHelper.loginUser(username, password);
-    if (user != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyIsLoggedIn, true);
-      await prefs.setString(_keyUsername, username);
-      return true;
+    try {
+      final response = await ApiService.login(username, password);
+      if (response['success'] == true) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_keyIsLoggedIn, true);
+        await prefs.setString(_keyUsername, username);
+        return true;
+      }
+    } catch (_) {
+      final user = await _dbHelper.loginUser(username, password);
+      if (user != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_keyIsLoggedIn, true);
+        await prefs.setString(_keyUsername, username);
+        return true;
+      }
     }
     return false;
   }

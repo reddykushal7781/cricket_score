@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:confetti/confetti.dart';
+import 'dart:convert';
+import 'package:flutter/services.dart';
 import '../providers/match_provider.dart';
+import '../services/api_service.dart';
 
 class CelebrationPage extends StatefulWidget {
   const CelebrationPage({super.key});
@@ -18,6 +21,94 @@ class _CelebrationPageState extends State<CelebrationPage> {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 10));
     _confettiController.play();
+  }
+
+  void _publishMatchResults(BuildContext context, MatchProvider provider) {
+    final matchJson = provider.compileMatchJson();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E222B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(Icons.cloud_upload, color: Colors.amber),
+              SizedBox(width: 8),
+              Text(
+                'Publish Match?',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Would you like to publish this match\'s results to the server?',
+            style: TextStyle(color: Colors.grey),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CANCEL', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Dismiss confirmation dialog
+                
+                // Show loading dialog
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF39FF14)),
+                  ),
+                );
+                
+                try {
+                  final result = await ApiService.publishMatch(matchJson);
+                  Navigator.of(context).pop(); // Dismiss loading spinner
+                  
+                  if (result['success'] == true) {
+                    // Reset active match state
+                    provider.exitMatch();
+                    // Go back to the dashboard/home screen
+                    Navigator.of(context).pop(); 
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(result['message'] ?? 'Published to backend successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(result['message'] ?? 'Failed to publish.'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  Navigator.of(context).pop(); // Dismiss loading spinner
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to connect to backend: ${e.toString()}'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('PUBLISH', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -173,6 +264,30 @@ class _CelebrationPageState extends State<CelebrationPage> {
                   ),
                 ),
                 const SizedBox(height: 48),
+
+                // Publish to Backend Button
+                ElevatedButton.icon(
+                  onPressed: () => _publishMatchResults(context, provider),
+                  icon: const Icon(Icons.cloud_upload, color: Colors.black),
+                  label: const Text(
+                    'PUBLISH TO BACKEND',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Exit button
                 ElevatedButton(

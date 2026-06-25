@@ -1,5 +1,5 @@
 class UserProfile {
-  final String email;
+  final String username;
   final String name;
   final String avatarUrl;
   final String role;
@@ -10,7 +10,7 @@ class UserProfile {
   final FieldingStats fieldingStats;
 
   UserProfile({
-    required this.email,
+    required this.username,
     required this.name,
     required this.avatarUrl,
     required this.role,
@@ -22,26 +22,26 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
-    final stats = json['stats'] as Map<String, dynamic>;
+    final stats = (json['stats'] ?? {}) as Map<String, dynamic>;
     return UserProfile(
-      email: json['email'] as String,
-      name: json['name'] as String,
-      avatarUrl: json['avatarUrl'] as String,
-      role: json['role'] as String,
-      battingStyle: json['battingStyle'] as String,
-      bowlingStyle: json['bowlingStyle'] as String,
+      username: (json['username'] ?? json['email'] ?? '') as String,
+      name: (json['name'] ?? '') as String,
+      avatarUrl: (json['avatarUrl'] ?? '') as String,
+      role: (json['role'] ?? 'Player') as String,
+      battingStyle: (json['battingStyle'] ?? 'Right-hand bat') as String,
+      bowlingStyle: (json['bowlingStyle'] ?? 'Right-arm medium') as String,
       battingStats:
-          BattingStats.fromJson(stats['batting'] as Map<String, dynamic>),
+          BattingStats.fromJson((stats['batting'] ?? {}) as Map<String, dynamic>),
       bowlingStats:
-          BowlingStats.fromJson(stats['bowling'] as Map<String, dynamic>),
+          BowlingStats.fromJson((stats['bowling'] ?? {}) as Map<String, dynamic>),
       fieldingStats:
-          FieldingStats.fromJson(stats['fielding'] as Map<String, dynamic>),
+          FieldingStats.fromJson((stats['fielding'] ?? {}) as Map<String, dynamic>),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'email': email,
+      'username': username,
       'name': name,
       'avatarUrl': avatarUrl,
       'role': role,
@@ -87,18 +87,18 @@ class BattingStats {
 
   factory BattingStats.fromJson(Map<String, dynamic> json) {
     return BattingStats(
-      matches: json['matches'] as int,
-      innings: json['innings'] as int,
-      runs: json['runs'] as int,
-      ballsFaced: json['ballsFaced'] as int,
-      average: (json['average'] as num).toDouble(),
-      strikeRate: (json['strikeRate'] as num).toDouble(),
-      highestScore: json['highestScore'] as String,
-      notOuts: json['notOuts'] as int,
-      fifties: json['fifties'] as int,
-      hundreds: json['hundreds'] as int,
-      fours: json['fours'] as int,
-      sixes: json['sixes'] as int,
+      matches: json['matches'] as int? ?? 0,
+      innings: json['innings'] as int? ?? 0,
+      runs: json['runs'] as int? ?? 0,
+      ballsFaced: json['ballsFaced'] as int? ?? 0,
+      average: (json['average'] as num? ?? 0.0).toDouble(),
+      strikeRate: (json['strikeRate'] as num? ?? 0.0).toDouble(),
+      highestScore: (json['highestScore'] ?? '0') as String,
+      notOuts: json['notOuts'] as int? ?? 0,
+      fifties: json['fifties'] as int? ?? 0,
+      hundreds: json['hundreds'] as int? ?? 0,
+      fours: json['fours'] as int? ?? 0,
+      sixes: json['sixes'] as int? ?? 0,
     );
   }
 
@@ -149,17 +149,17 @@ class BowlingStats {
 
   factory BowlingStats.fromJson(Map<String, dynamic> json) {
     return BowlingStats(
-      matches: json['matches'] as int,
-      innings: json['innings'] as int,
-      wickets: json['wickets'] as int,
-      runsConceded: json['runsConceded'] as int,
-      ballsBowled: json['ballsBowled'] as int,
-      economy: (json['economy'] as num).toDouble(),
-      average: (json['average'] as num).toDouble(),
-      strikeRate: (json['strikeRate'] as num).toDouble(),
-      bestBowling: json['bestBowling'] as String,
-      threeWickets: json['threeWickets'] as int,
-      fiveWickets: json['fiveWickets'] as int,
+      matches: json['matches'] as int? ?? 0,
+      innings: json['innings'] as int? ?? 0,
+      wickets: json['wickets'] as int? ?? 0,
+      runsConceded: json['runsConceded'] as int? ?? 0,
+      ballsBowled: json['ballsBowled'] as int? ?? 0,
+      economy: (json['economy'] as num? ?? 0.0).toDouble(),
+      average: (json['average'] as num? ?? 0.0).toDouble(),
+      strikeRate: (json['strikeRate'] as num? ?? 0.0).toDouble(),
+      bestBowling: (json['bestBowling'] ?? '-') as String,
+      threeWickets: json['threeWickets'] as int? ?? 0,
+      fiveWickets: json['fiveWickets'] as int? ?? 0,
     );
   }
 
@@ -193,9 +193,9 @@ class FieldingStats {
 
   factory FieldingStats.fromJson(Map<String, dynamic> json) {
     return FieldingStats(
-      catches: json['catches'] as int,
-      stumpings: json['stumpings'] as int,
-      runOuts: json['runOuts'] as int,
+      catches: json['catches'] as int? ?? 0,
+      stumpings: json['stumpings'] as int? ?? 0,
+      runOuts: json['runOuts'] as int? ?? 0,
     );
   }
 

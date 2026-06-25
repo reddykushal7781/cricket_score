@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../services/database_helper.dart';
 import 'login_page.dart';
 import '../models/user_profile.dart';
+import '../services/api_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -69,25 +70,33 @@ class _ProfilePageState extends State<ProfilePage> {
     final name = await _authService.getUsername();
     final matches = await DatabaseHelper.instance.getCompletedMatches();
 
-    // Parse the JSON profile data
-    final profile = UserProfile.fromJson(_mockProfileJson);
+    UserProfile? profile;
+    if (name != null) {
+      try {
+        profile = await ApiService.getPlayerProfile(name);
+      } catch (e) {
+        debugPrint('Error loading user profile from API, using local mock: $e');
+      }
+    }
+
+    if (profile == null) {
+      final mock = UserProfile.fromJson(_mockProfileJson);
+      profile = UserProfile(
+        username: name ?? mock.username,
+        name: name ?? mock.name,
+        avatarUrl: mock.avatarUrl,
+        role: mock.role,
+        battingStyle: mock.battingStyle,
+        bowlingStyle: mock.bowlingStyle,
+        battingStats: mock.battingStats,
+        bowlingStats: mock.bowlingStats,
+        fieldingStats: mock.fieldingStats,
+      );
+    }
 
     if (mounted) {
       setState(() {
-        // Dynamically override the name and email if we have a logged-in user name
-        _userProfile = UserProfile(
-          email: name != null
-              ? '${name.toLowerCase().replaceAll(' ', '')}@example.com'
-              : profile.email,
-          name: name ?? profile.name,
-          avatarUrl: profile.avatarUrl,
-          role: profile.role,
-          battingStyle: profile.battingStyle,
-          bowlingStyle: profile.bowlingStyle,
-          battingStats: profile.battingStats,
-          bowlingStats: profile.bowlingStats,
-          fieldingStats: profile.fieldingStats,
-        );
+        _userProfile = profile;
         _matchCount = matches.length;
         _isLoading = false;
       });
@@ -179,13 +188,15 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    _userProfile!.email,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.white.withOpacity(0.6),
+                                  if (_userProfile!.username.isNotEmpty) ...[
+                                    Text(
+                                      '@${_userProfile!.username}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.white.withOpacity(0.6),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                   const SizedBox(height: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(

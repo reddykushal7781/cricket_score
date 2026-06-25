@@ -491,7 +491,24 @@ class _ScoringPageState extends State<ScoringPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('BATSMEN', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('BATSMEN', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
+                                if (provider.striker != null && provider.nonStriker != null)
+                                  TextButton.icon(
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: neonGreen,
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: const Size(50, 30),
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () => provider.swapStrikerAndNonStriker(),
+                                    icon: const Icon(Icons.swap_vert, size: 16),
+                                    label: const Text('SWAP POSITIONS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                  ),
+                              ],
+                            ),
                             const Divider(color: Colors.white10),
                             
                             // Striker line

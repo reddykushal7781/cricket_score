@@ -22,8 +22,22 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // Drop and recreate match_players table to change primary key
+          await db.execute('DROP TABLE IF EXISTS match_players');
+          await db.execute('''
+            CREATE TABLE match_players (
+              match_id INTEGER NOT NULL,
+              player_id INTEGER NOT NULL,
+              team_index INTEGER NOT NULL,
+              PRIMARY KEY (match_id, player_id, team_index)
+            )
+          ''');
+        }
+      },
     );
   }
 
@@ -85,7 +99,7 @@ class DatabaseHelper {
         match_id $integerType,
         player_id $integerType,
         team_index $integerType,
-        PRIMARY KEY (match_id, player_id)
+        PRIMARY KEY (match_id, player_id, team_index)
       )
     ''');
 
@@ -245,6 +259,13 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> deleteMatch(int matchId) async {
+    final db = await database;
+    await db.delete('matches', where: 'id = ?', whereArgs: [matchId]);
+    await db.delete('match_players', where: 'match_id = ?', whereArgs: [matchId]);
+    await db.delete('ball_events', where: 'match_id = ?', whereArgs: [matchId]);
+  }
+
   Future<List<CricketMatch>> getCompletedMatches() async {
     final db = await database;
     final results = await db.query(
@@ -312,6 +333,18 @@ class DatabaseHelper {
       WHERE mp.match_id = ? AND mp.team_index = ?
     ''', [matchId, teamIndex]);
     return results.map((m) => Player.fromMap(m)).toList();
+  }
+
+  Future<List<CricketMatch>> getPlayerMatchesByName(String playerName) async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT m.* FROM matches m
+      INNER JOIN match_players mp ON m.id = mp.match_id
+      INNER JOIN players p ON mp.player_id = p.id
+      WHERE p.name = ?
+      ORDER BY m.id DESC
+    ''', [playerName]);
+    return results.map((m) => CricketMatch.fromMap(m)).toList();
   }
 
   // --- Compile Stats on Innings / Match Completion ---

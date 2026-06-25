@@ -13,12 +13,8 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   int _currentIndex = 0;
-
-  final List<Widget> _tabs = [
-    const HomeTab(),
-    const StatsTab(),
-    const PreviousMatchesTab(),
-  ];
+  int _matchesTabKeySuffix = 0;
+  int _statsTabKeySuffix = 0;
 
   final List<String> _titles = [
     'Dashboard',
@@ -52,7 +48,11 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       body: IndexedStack(
         index: _currentIndex,
-        children: _tabs,
+        children: [
+          const HomeTab(),
+          StatsTab(key: ValueKey('stats_tab_$_statsTabKeySuffix')),
+          PreviousMatchesTab(key: ValueKey('matches_tab_$_matchesTabKeySuffix')),
+        ],
       ),
       bottomNavigationBar: Theme(
         data: Theme.of(context).copyWith(
@@ -63,6 +63,11 @@ class _DashboardPageState extends State<DashboardPage> {
           onTap: (index) {
             setState(() {
               _currentIndex = index;
+              if (index == 2) {
+                _matchesTabKeySuffix++;
+              } else if (index == 1) {
+                _statsTabKeySuffix++;
+              }
             });
           },
           selectedItemColor: neonGreen,

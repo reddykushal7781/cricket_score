@@ -490,6 +490,11 @@ class MatchProvider extends ChangeNotifier {
     _nonStriker = temp;
   }
 
+  void swapStrikerAndNonStriker() {
+    _rotateStrike();
+    notifyListeners();
+  }
+
   // --- Undo last action ---
   Future<void> undoLastBall() async {
     if (_currentMatch == null || _ballEvents.isEmpty) return;
@@ -588,8 +593,13 @@ class MatchProvider extends ChangeNotifier {
   Future<void> _saveCareerStatsToDB() async {
     final List<Player> updatedPlayers = [];
     final allMatchPlayers = [..._teamAPlayers, ..._teamBPlayers];
+    final Set<int> processedPlayerIds = {};
 
     for (var matchPlayer in allMatchPlayers) {
+      if (matchPlayer.id == null) continue;
+      if (processedPlayerIds.contains(matchPlayer.id)) continue;
+      processedPlayerIds.add(matchPlayer.id!);
+
       Player freshPlayer;
       try {
         freshPlayer = await DatabaseHelper.instance.getOrCreatePlayer(matchPlayer.name);
@@ -599,30 +609,45 @@ class MatchProvider extends ChangeNotifier {
 
       int runsInMatch = 0;
       int ballsFacedInMatch = 0;
-      int highestScoreInMatch = 0;
-      
-      if (_batsmenScorecards.containsKey(freshPlayer.id)) {
-        final card = _batsmenScorecards[freshPlayer.id!]!;
-        runsInMatch = card.runs;
-        ballsFacedInMatch = card.ballsFaced;
-        highestScoreInMatch = card.runs;
-      }
-
       int ballsBowledInMatch = 0;
       int runsConcededInMatch = 0;
       int wicketsInMatch = 0;
-
-      if (_bowlerScorecards.containsKey(freshPlayer.id)) {
-        final card = _bowlerScorecards[freshPlayer.id!]!;
-        ballsBowledInMatch = card.ballsBowled;
-        runsConcededInMatch = card.runsConceded;
-        wicketsInMatch = card.wickets;
-      }
-
       int catchesInMatch = 0;
+
       for (var event in _ballEvents) {
+        // Batting stats
+        if (event.batsmanId == freshPlayer.id) {
+          if (event.extraType != 'wide') {
+            ballsFacedInMatch++;
+          }
+          if (event.extraType == 'none' || event.extraType == 'noball') {
+            runsInMatch += event.runs;
+          }
+        }
+
+        // Bowling stats
+        if (event.bowlerId == freshPlayer.id) {
+          bool isLegal = (event.extraType != 'wide' && event.extraType != 'noball');
+          if (isLegal) {
+            ballsBowledInMatch++;
+          }
+
+          int bowlerConceded = event.runs;
+          if (event.extraType == 'wide' || event.extraType == 'noball') {
+            bowlerConceded += 1;
+          }
+          if (event.extraType != 'bye' && event.extraType != 'legbye') {
+            runsConcededInMatch += bowlerConceded;
+          }
+
+          if (event.isWicket && event.wicketType != 'run out') {
+            wicketsInMatch++;
+          }
+        }
+
+        // Fielding stats
         if (event.fielderId == freshPlayer.id && event.wicketType == 'caught') {
-          catchesInMatch += 1;
+          catchesInMatch++;
         }
       }
 
@@ -634,7 +659,7 @@ class MatchProvider extends ChangeNotifier {
         ballsBowled: freshPlayer.ballsBowled + ballsBowledInMatch,
         runsConceded: freshPlayer.runsConceded + runsConcededInMatch,
         catches: freshPlayer.catches + catchesInMatch,
-        highestScore: runsInMatch > freshPlayer.highestScore ? highestScoreInMatch : freshPlayer.highestScore,
+        highestScore: runsInMatch > freshPlayer.highestScore ? runsInMatch : freshPlayer.highestScore,
       );
 
       updatedPlayers.add(updatedPlayer);
@@ -645,6 +670,236 @@ class MatchProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('SQLite Error (saveCareerStats): $e');
     }
+  }
+
+  Map<String, dynamic> compileMatchJson() {
+    if (_currentMatch == null) return {};
+
+    final List<Map<String, Map<String, dynamic>>> inningsBatsmen = [{}, {}];
+    final List<Map<String, Map<String, dynamic>>> inningsBowlers = [{}, {}];
+    final List<Map<String, int>> inningsExtras = [
+      {'wide': 0, 'noball': 0, 'bye': 0, 'legbye': 0, 'total': 0},
+      {'wide': 0, 'noball': 0, 'bye': 0, 'legbye': 0, 'total': 0}
+    ];
+
+    for (var p in _teamAPlayers) {
+      inningsBatsmen[0][p.name] = {
+        'playerId': p.id ?? 0,
+        'name': p.name,
+        'runs': 0,
+        'ballsFaced': 0,
+        'fours': 0,
+        'sixes': 0,
+        'isOut': false,
+        'dismissalType': '',
+        'dismissedBy': '',
+        'fielderName': ''
+      };
+    }
+    for (var p in _teamBPlayers) {
+      inningsBowlers[0][p.name] = {
+        'playerId': p.id ?? 0,
+        'name': p.name,
+        'ballsBowled': 0,
+        'runsConceded': 0,
+        'wickets': 0,
+        'maidens': 0,
+        'economy': 0.0
+      };
+    }
+
+    for (var p in _teamBPlayers) {
+      inningsBatsmen[1][p.name] = {
+        'playerId': p.id ?? 0,
+        'name': p.name,
+        'runs': 0,
+        'ballsFaced': 0,
+        'fours': 0,
+        'sixes': 0,
+        'isOut': false,
+        'dismissalType': '',
+        'dismissedBy': '',
+        'fielderName': ''
+      };
+    }
+    for (var p in _teamAPlayers) {
+      inningsBowlers[1][p.name] = {
+        'playerId': p.id ?? 0,
+        'name': p.name,
+        'ballsBowled': 0,
+        'runsConceded': 0,
+        'wickets': 0,
+        'maidens': 0,
+        'economy': 0.0
+      };
+    }
+
+    for (var event in _ballEvents) {
+      final innIdx = event.inningsIndex;
+      if (innIdx < 0 || innIdx > 1) continue;
+
+      final batsmanName = event.batsmanName;
+      final bowlerName = event.bowlerName;
+
+      if (!inningsBatsmen[innIdx].containsKey(batsmanName)) {
+        final pList = innIdx == 0 ? _teamAPlayers : _teamBPlayers;
+        final p = pList.firstWhere((pl) => pl.name.toLowerCase() == batsmanName.toLowerCase(), orElse: () => Player(name: batsmanName));
+        inningsBatsmen[innIdx][batsmanName] = {
+          'playerId': p.id ?? 0,
+          'name': batsmanName,
+          'runs': 0,
+          'ballsFaced': 0,
+          'fours': 0,
+          'sixes': 0,
+          'isOut': false,
+          'dismissalType': '',
+          'dismissedBy': '',
+          'fielderName': ''
+        };
+      }
+
+      if (!inningsBowlers[innIdx].containsKey(bowlerName)) {
+        final pList = innIdx == 0 ? _teamBPlayers : _teamAPlayers;
+        final p = pList.firstWhere((pl) => pl.name.toLowerCase() == bowlerName.toLowerCase(), orElse: () => Player(name: bowlerName));
+        inningsBowlers[innIdx][bowlerName] = {
+          'playerId': p.id ?? 0,
+          'name': bowlerName,
+          'ballsBowled': 0,
+          'runsConceded': 0,
+          'wickets': 0,
+          'maidens': 0,
+          'economy': 0.0
+        };
+      }
+
+      final bat = inningsBatsmen[innIdx][batsmanName]!;
+      final bowl = inningsBowlers[innIdx][bowlerName]!;
+      final ext = inningsExtras[innIdx];
+
+      if (event.extraType != 'wide') {
+        bat['ballsFaced'] = (bat['ballsFaced'] as int) + 1;
+      }
+      if (event.extraType == 'none' || event.extraType == 'noball') {
+        bat['runs'] = (bat['runs'] as int) + event.runs;
+        if (event.runs == 4) bat['fours'] = (bat['fours'] as int) + 1;
+        if (event.runs == 6) bat['sixes'] = (bat['sixes'] as int) + 1;
+      }
+
+      if (isLegalBall(event.extraType)) {
+        bowl['ballsBowled'] = (bowl['ballsBowled'] as int) + 1;
+      }
+
+      int bowlConceded = event.runs;
+      if (event.extraType == 'wide' || event.extraType == 'noball') {
+        bowlConceded += 1;
+      }
+      if (event.extraType != 'bye' && event.extraType != 'legbye') {
+        bowl['runsConceded'] = (bowl['runsConceded'] as int) + bowlConceded;
+      }
+
+      if (event.isWicket) {
+        final dismissedName = event.dismissedPlayerId == event.batsmanId ? batsmanName : (event.fielderName ?? batsmanName);
+        if (inningsBatsmen[innIdx].containsKey(dismissedName)) {
+          final dismissedBat = inningsBatsmen[innIdx][dismissedName]!;
+          dismissedBat['isOut'] = true;
+          dismissedBat['dismissalType'] = event.wicketType ?? 'out';
+          dismissedBat['dismissedBy'] = bowlerName;
+          dismissedBat['fielderName'] = event.fielderName ?? '';
+        }
+
+        if (event.wicketType != 'run out') {
+          bowl['wickets'] = (bowl['wickets'] as int) + 1;
+        }
+      }
+
+      if (event.extraType == 'wide' || event.extraType == 'noball') {
+        ext[event.extraType] = (ext[event.extraType] ?? 0) + 1;
+        ext['total'] = (ext['total'] ?? 0) + 1;
+      } else if (event.extraType == 'bye' || event.extraType == 'legbye') {
+        ext[event.extraType] = (ext[event.extraType] ?? 0) + event.runs;
+        ext['total'] = (ext['total'] ?? 0) + event.runs;
+      }
+    }
+
+    for (int i = 0; i < 2; i++) {
+      inningsBowlers[i].forEach((name, data) {
+        final balls = data['ballsBowled'] as int;
+        final conceded = data['runsConceded'] as int;
+        if (balls > 0) {
+          data['economy'] = conceded / (balls / 6.0);
+        }
+      });
+    }
+
+    final teamABallsBowled = _inningsIndex == 1 ? _currentMatch!.teamABalls : _ballsBowled;
+    final teamBBallsBowled = _inningsIndex == 1 ? _ballsBowled : 0;
+
+    return {
+      'matchId': _currentMatch!.id,
+      'date': _currentMatch!.date,
+      'teamAName': _currentMatch!.teamAName,
+      'teamBName': _currentMatch!.teamBName,
+      'oversCount': _currentMatch!.oversCount,
+      'playersPerTeam': _currentMatch!.playersPerTeam,
+      'winner': _currentMatch!.winner,
+      'teamAScore': _inningsIndex == 1 ? _firstInningsScore : _totalScore,
+      'teamAWickets': _inningsIndex == 1 ? _currentMatch!.teamAWickets : _wickets,
+      'teamABallsBowled': teamABallsBowled,
+      'teamBScore': _inningsIndex == 1 ? _totalScore : 0,
+      'teamBWickets': _inningsIndex == 1 ? _wickets : 0,
+      'teamBBallsBowled': teamBBallsBowled,
+      'innings': [
+        {
+          'inningsIndex': 0,
+          'battingTeam': _currentMatch!.teamAName,
+          'bowlingTeam': _currentMatch!.teamBName,
+          'totalRuns': _firstInningsScore > 0 ? _firstInningsScore : _totalScore,
+          'wickets': _inningsIndex == 1 ? _currentMatch!.teamAWickets : _wickets,
+          'ballsBowled': _inningsIndex == 1 ? _currentMatch!.teamABalls : _ballsBowled,
+          'extras': inningsExtras[0],
+          'battingScorecard': inningsBatsmen[0].values.where((bat) {
+            return (bat['ballsFaced'] as int) > 0 || (bat['isOut'] as bool);
+          }).toList(),
+          'bowlingScorecard': inningsBowlers[0].values.where((bowl) {
+            return (bowl['ballsBowled'] as int) > 0;
+          }).toList(),
+        },
+        {
+          'inningsIndex': 1,
+          'battingTeam': _currentMatch!.teamBName,
+          'bowlingTeam': _currentMatch!.teamAName,
+          'totalRuns': _inningsIndex == 1 ? _totalScore : 0,
+          'wickets': _inningsIndex == 1 ? _wickets : 0,
+          'ballsBowled': _inningsIndex == 1 ? _ballsBowled : 0,
+          'extras': inningsExtras[1],
+          'battingScorecard': inningsBatsmen[1].values.where((bat) {
+            final name = bat['name'] as String;
+            final isAtCrease = (name == _striker?.name || name == _nonStriker?.name);
+            return (bat['ballsFaced'] as int) > 0 || (bat['isOut'] as bool) || isAtCrease;
+          }).toList(),
+          'bowlingScorecard': inningsBowlers[1].values.where((bowl) {
+            return (bowl['ballsBowled'] as int) > 0;
+          }).toList(),
+        }
+      ],
+      'ballEvents': _ballEvents.map((e) => {
+        'inningsIndex': e.inningsIndex,
+        'overNumber': e.overNumber,
+        'ballNumber': e.ballNumber,
+        'batsmanName': e.batsmanName,
+        'bowlerName': e.bowlerName,
+        'runs': e.runs,
+        'isWicket': e.isWicket ? 1 : 0,
+        'wicketType': e.wicketType ?? 'none',
+        'fielderName': e.fielderName,
+        'extraRuns': e.extraRuns,
+        'extraType': e.extraType,
+      }).toList(),
+    };
+  }
+
+  bool isLegalBall(String extraType) {
+    return extraType != 'wide' && extraType != 'noball';
   }
 
   void exitMatch() {
